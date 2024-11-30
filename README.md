@@ -162,52 +162,39 @@ semanage port -d -t ssh_port_t -p tcp 90
 
 Способ 3: Параметризованные политики
 
-getsebool -a | grep httpd
+Посмотрим ЛОГ
 
-Вывод:
-httpd_anon_write --> off
-httpd_builtin_scripting --> on
-httpd_can_check_spam --> off
-httpd_can_connect_ftp --> off
-httpd_can_connect_ldap --> off
-httpd_can_connect_mythtv --> off
-httpd_can_connect_zabbix --> off
-httpd_can_network_connect --> off
-httpd_can_network_connect_cobbler --> off
-httpd_can_network_connect_db --> off
-httpd_can_network_memcache --> off
-httpd_can_network_relay --> off
-httpd_can_sendmail --> off
-httpd_dbus_avahi --> off
-httpd_dbus_sssd --> off
-httpd_dontaudit_search_dirs --> off
-httpd_enable_cgi --> on
-httpd_enable_ftp_server --> off
-httpd_enable_homedirs --> off
-httpd_execmem --> off
-httpd_graceful_shutdown --> on
-httpd_manage_ipa --> off
-httpd_mod_auth_ntlm_winbind --> off
-httpd_mod_auth_pam --> off
-httpd_read_user_content --> off
-httpd_run_ipa --> off
-httpd_run_preupgrade --> off
-httpd_run_stickshift --> off
-httpd_serve_cobbler_files --> off
-httpd_setrlimit --> off
-httpd_ssi_exec --> off
-httpd_sys_script_anon_write --> off
-httpd_tmp_exec --> off
-httpd_tty_comm --> off
-httpd_unified --> off
-httpd_use_cifs --> off
-httpd_use_fusefs --> off
-httpd_use_gpg --> off
-httpd_use_nfs --> off
-httpd_use_openstack --> off
-httpd_use_sasl --> off
-httpd_verify_dns --> off
+[root@localhost vagrant]# audit2why < /var/log/audit/audit.log | grep 90
+    type=AVC msg=audit(1732449229.446:684): avc:  denied  { name_bind } for  pid=8935 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
+    type=AVC msg=audit(1732451941.172:699): avc:  denied  { name_bind } for  pid=9043 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
+    type=AVC msg=audit(1732453475.932:718): avc:  denied  { name_bind } for  pid=9155 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
+    type=AVC msg=audit(1732453553.407:724): avc:  denied  { name_bind } for  pid=9201 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
+    type=AVC msg=audit(1732454009.720:726): avc:  denied  { name_bind } for  pid=9230 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
+[root@localhost vagrant]# grep 1732449229.446:684 /var/log/audit/audit.log | audit2why
+    type=AVC msg=audit(1732449229.446:684): avc:  denied  { name_bind } for  pid=8935 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
 
-setsebool -P httpd_can_network_connect on
+        Was caused by:
+                Missing type enforcement (TE) allow rule.
 
-В данном случаем мы разрешим в httpd прослушивать все порты
+                You can use audit2allow to generate a loadable module to allow this access.
+
+[root@localhost vagrant]# grep 1732451941.172:699 /var/log/audit/audit.log | audit2why
+    type=AVC msg=audit(1732451941.172:699): avc:  denied  { name_bind } for  pid=9043 comm="nginx" src=90 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:reserved_port_t:s0 tclass=tcp_socket permissive=0
+
+        Was caused by:
+                Missing type enforcement (TE) allow rule.
+
+                You can use audit2allow to generate a loadable module to allow this access.
+
+    В методичке указано, что в резултате фильра должно быть указано значение nis_enable, которе нужно сменить, чтобы порт заработал. В нашем фильтре это значение не указано. 
+    Предлагается создать и добавить модуль  в разрешенные. Попробуем nis_enable найти и включить.
+
+[root@localhost vagrant]# semanage boolean -l | grep nis
+    varnishd_connect_any           (off  ,  off)  Allow varnishd to connect any
+    nis_enabled                    (off  ,  off)  Allow nis to enabled
+[root@localhost vagrant]# setsebool -P nis_enabled on
+[root@localhost vagrant]# systemctl restart nginx.service 
+    Job for nginx.service failed because the control process exited with error code. See "systemctl status nginx.service" and "journalctl -xe" for details.
+
+
+В данном случаем мы не смогли найти необходимый параметр, который мог бы помочь включить разрешение.
